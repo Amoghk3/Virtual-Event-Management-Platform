@@ -1,31 +1,63 @@
+// utils/emailService.js
 const nodemailer = require('nodemailer');
 
-let transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-});
 
-async function sendMail({ to, subject, text, html }) {
-  if (!process.env.SMTP_HOST) {
-    console.log('Email disabled. Would send to:', to, subject);
-    return;
+const DISABLE_EMAILS = process.env.DISABLE_EMAILS === '1';
+
+if (DISABLE_EMAILS) {
+  module.exports = {
+    sendMail: async () => Promise.resolve(),
+    sendWelcome: async () => Promise.resolve(),
+    sendRegistration: async () => Promise.resolve()
+  };
+} else {
+  let transporter = null;
+  function getTransporter() {
+    if (transporter) return transporter;
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const port = Number(process.env.SMTP_PORT || 587);
+    if (!host || !user || !pass) {
+      // No SMTP configured — sendMail will be a no-op
+      return null;
+    }
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass }
+    });
+    return transporter;
   }
-  return transporter.sendMail({ from: process.env.SMTP_USER, to, subject, text, html });
-}
 
-async function sendWelcome(user) {
-  return sendMail({ to: user.email, subject: 'Welcome', text: `Hello ${user.name}, welcome!` });
-}
-async function sendRegistration(to, event) {
-  return sendMail({ to, subject: `Registered: ${event.title}`, text: `You are registered for ${event.title} at ${event.start}` });
-}
-async function sendEventUpdated(to, event) {
-  return sendMail({ to, subject: `Event updated: ${event.title}`, text: `Event updated. New time: ${event.start}` });
-}
-async function sendEventCancelled(to, event) {
-  return sendMail({ to, subject: `Event cancelled: ${event.title}`, text: `Event ${event.title} has been cancelled` });
-}
+  async function sendMail({ to, subject, text, html }) {
+    const t = getTransporter();
+    if (!t) return Promise.resolve();
+    return t.sendMail({
+      from: process.env.SMTP_USER,
+      to,
+      subject,
+      text,
+      html
+    });
+  }
 
-module.exports = { sendWelcome, sendRegistration, sendEventUpdated, sendEventCancelled };
+  function sendWelcome(user) {
+    return sendMail({
+      to: user.email,
+      subject: 'Welcome!',
+      text: `Hi ${user.name || user.email},\n\nWelcome to the platform.\n\nThanks.`
+    });
+  }
+
+  function sendRegistration(to, ev) {
+    return sendMail({
+      to,
+      subject: `Registered: ${ev.title}`,
+      text: `You are registered for ${ev.title} at ${ev.start}`
+    });
+  }
+
+  module.exports = { sendMail, sendWelcome, sendRegistration };
+}

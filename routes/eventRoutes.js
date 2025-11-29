@@ -1,24 +1,20 @@
+// routes/eventRoutes.js
 const express = require('express');
-const { authenticateJWT, requireRole } = require('../middleware/auth');
-const { createEvent, listEvents, getEvent, updateEvent, deleteEvent, registerForEvent, unregisterFromEvent } = require('../controllers/eventController');
-const { body, validationResult } = require('express-validator');
-
 const router = express.Router();
+const eventController = require('../controllers/eventController');
+const { authenticateJWT, requireRole } = require('../middleware/auth');
 
-router.get('/', listEvents);
-router.get('/:id', getEvent);
+// Public: list and get
+router.get('/', eventController.listEvents);
+router.get('/:id', eventController.getEvent);
 
-const eventValidation = [
-  body('title').isString().notEmpty(),
-  body('start').isISO8601(),
-  (req, res, next) => { const errs = validationResult(req); if (!errs.isEmpty()) return res.status(400).json({ errors: errs.array() }); next(); }
-];
+// Protected: create, update, delete — only organizers or superadmin can create; update/delete owner or superadmin
+router.post('/', authenticateJWT, requireRole('organizer'), eventController.createEvent);
+router.put('/:id', authenticateJWT, eventController.updateEvent); // controller checks ownership / superadmin
+router.delete('/:id', authenticateJWT, eventController.deleteEvent);
 
-router.post('/', authenticateJWT, requireRole('organizer'), eventValidation, createEvent);
-router.put('/:id', authenticateJWT, requireRole('organizer'), eventValidation, updateEvent);
-router.delete('/:id', authenticateJWT, requireRole('organizer'), deleteEvent);
-
-router.post('/:id/register', authenticateJWT, registerForEvent);
-router.post('/:id/unregister', authenticateJWT, unregisterFromEvent);
+// Participant actions (authenticated)
+router.post('/:id/register', authenticateJWT, eventController.registerForEvent);
+router.post('/:id/unregister', authenticateJWT, eventController.unregisterFromEvent);
 
 module.exports = router;

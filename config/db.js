@@ -1,18 +1,35 @@
-const mongoose = require('mongoose');
+// tests/setup.js
+// Ensure test env is set before other requires
+process.env.DISABLE_EMAILS = '1';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'testsecret';
 
-async function connectDB() {
-  const uri = process.env.MONGO_URI;
-  if (!uri) throw new Error('MONGO_URI not set in .env');
-  try {
+// Then the rest:
+const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+
+let mongod;
+
+module.exports = {
+  connect: async () => {
+    mongod = await MongoMemoryServer.create();
+    const uri = mongod.getUri();
     await mongoose.connect(uri, {
       useNewUrlParser: true,
       useUnifiedTopology: true
     });
-    console.log('MongoDB connected');
-  } catch (err) {
-    console.error('MongoDB connection error', err);
-    process.exit(1);
-  }
-}
+    mongoose.set('strictQuery', false);
+  },
 
-module.exports = connectDB;
+  clearDatabase: async () => {
+    const collections = mongoose.connection.collections;
+    for (const key in collections) {
+      await collections[key].deleteMany({});
+    }
+  },
+
+  closeDatabase: async () => {
+    await mongoose.connection.dropDatabase();
+    await mongoose.connection.close();
+    if (mongod) await mongod.stop();
+  }
+};

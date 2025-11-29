@@ -1,13 +1,14 @@
 // tests/setup.js
+// Ensure tests never attempt real emails and have a stable JWT secret
+process.env.DISABLE_EMAILS = '1';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'testsecret';
+
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
-let mongod = null;
+let mongod;
 
 module.exports = {
-  /**
-   * Start a mongodb-memory-server and connect mongoose
-   */
   connect: async () => {
     mongod = await MongoMemoryServer.create();
     const uri = mongod.getUri();
@@ -15,28 +16,21 @@ module.exports = {
       useNewUrlParser: true,
       useUnifiedTopology: true
     });
-    // optional: reduce Mongoose log noise in tests
     mongoose.set('strictQuery', false);
   },
 
-  /**
-   * Drop database, close mongoose connection and stop mongod
-   */
+  clearDatabase: async () => {
+    const collections = mongoose.connection.collections;
+    for (const key in collections) {
+      await collections[key].deleteMany({});
+    }
+  },
+
   closeDatabase: async () => {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.connection.dropDatabase();
       await mongoose.connection.close();
     }
     if (mongod) await mongod.stop();
-  },
-
-  /**
-   * Remove all data from all collections
-   */
-  clearDatabase: async () => {
-    const collections = mongoose.connection.collections;
-    for (const key in collections) {
-      await collections[key].deleteMany({});
-    }
   }
 };
